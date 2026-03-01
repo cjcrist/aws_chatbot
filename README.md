@@ -1,6 +1,27 @@
 # aws_chatbot
 
-AWS chatbot API backed by FastAPI, LangChain, and LocalStack.
+An AI-powered assistant that answers questions about your AWS account. Ask about S3 buckets, IAM users, EC2 instances, and more. The app uses **LocalStack** to mock AWS services locally, so you can explore and test without touching real cloud resources.
+
+![AWS AI Webchat Frontend](images/frontend.png)
+
+## Backend
+API listens on `http://localhost:8000/chat` by default. The listener port is configured at runtime by `uvicorn` command.
+
+- **FastAPI** — REST API
+- **LangChain** — LLM orchestration and tooling
+- **LangGraph** — Agent graph with conversation memory (InMemorySaver)
+- **OpenAI** — Chat model (configurable via `MODEL` env var)
+
+## Frontend
+Can be accessed at `http://localhost:3000/` by default.
+
+- **Next.js** — React framework with App Router
+- **React** — UI components
+- **Recharts** — Session metrics and response-time charts
+
+## LocalStack
+
+**LocalStack** mocks AWS services (S3, IAM, EC2) locally in Docker. The chatbot reads account data from LocalStack instead of real AWS, so you can run everything offline with seeded test data. The seed scripts are located in `scripts/localstack/.`. 
 
 ## Required `.env` Variables
 
@@ -21,17 +42,12 @@ Create a `.env` file in the project root.
 
 - Set `OPENAI_API_KEY` for OpenAI models.
 
-## LOCALSTACK
-AWS is being mocked by `localstack`, which is hosted in `docker`. `Localstack` is included in the `docker-compose.yml`
-file as a service, along with `chatbot`. The data is seeded fresh on each startup of the container (e.g. `docker compose up -d`, `docker compose down`)
-The seed scripts are located in `scripts/localstack/.`. 
-
 ## Start with Docker Compose
 
 ```bash
 docker compose up -d
 ```
-- Builds the docker image for `chatbot`, if it doesn't exist.  Can also add `--build` if the images does not build automatically.
+- Builds the docker images for `chatbot` and `webchat`, if they do not exist. Can also add `--build` if an image does not build automatically.
 - Make sure you wait for the seed script to finish seeding localstack with data. View the logs once services are up! 
 
 Check status:
@@ -45,6 +61,15 @@ docker compose logs -f
 ```
 - Views logs for all services (e.g. `localstack`, `chatbot`). 
 - Seed script is finished when it shows `Ready`. 
+
+Webchat URL:
+```text
+http://localhost:3000
+```
+Backend URL:
+```text
+http://localhost:8000
+```
 
 Bring down the network and services:
 ```bash
@@ -182,3 +207,12 @@ Important: for follow-up context to work, every request in the same thread must 
 - `x-user-id` header.
 
 If neither is provided, the backend generates a random ID and the next request will not have prior context unless you send a stable `user_id` payload parameter or `x-user-id` header.
+
+## Frontend Notes
+
+- The Next.js frontend lives in `frontend/`.
+- The webchat uses `user_id` as the conversation thread id.
+- The first page load auto-generates a `user_id` and keeps it for the browser session.
+- You can switch users by entering a different `user_id`.
+- "New chat" clears the current browser session chat and generates a new `user_id`.
+- On the backend, `InMemorySaver` keeps old thread history in process memory until the chatbot container restarts.

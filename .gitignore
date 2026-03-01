@@ -224,3 +224,7 @@ __marimo__/
 
 # idea
 .idea
+
+# frontend
+frontend/node_modules/
+frontend/.next/

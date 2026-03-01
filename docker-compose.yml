@@ -33,3 +33,15 @@ services:
     depends_on:
       localstack:
         condition: service_healthy
+
+  webchat:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: webchat
+    ports:
+      - "3000:3000"
+    environment:
+      - CHAT_API_URL=http://chatbot:8000
+    depends_on:
+      - chatbot
