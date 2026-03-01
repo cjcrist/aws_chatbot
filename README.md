@@ -1,2 +1,184 @@
 # aws_chatbot
-Simple chatbot for aws services
+
+AWS chatbot API backed by FastAPI, LangChain, and LocalStack.
+
+## Required `.env` Variables
+
+Create a `.env` file in the project root.
+
+| Variable | Required | Example                  | Notes |
+|---|---|--------------------------|---|
+| `MODEL` | Yes | `gpt-5-nano-2025-08-07`  | Model name used by LangChain. If no provider prefix is included, code defaults to `openai:`. |
+| `OPENAI_API_KEY` | Yes | `sk-...`                 | OpenAI API key. Required when using an OpenAI model. |
+| `MODEL_TEMP` | No | `0`                      | Model temperature. Defaults to `0`. |
+| `LOG_LEVEL` | No | `DEBUG`                  | App log level. Defaults to `INFO`. |
+| `USE_LOCALSTACK` | No | `true`                   | Set to `true` to use LocalStack endpoints. Defaults to `false`. |
+| `LOCALSTACK_URL` | No | `http://localstack:4566` | LocalStack endpoint used when `USE_LOCALSTACK=true`. Defaults to `http://localhost:4566` if unset. |
+| `AWS_REGION` | No | `us-east-1`              | AWS region. Defaults to `us-east-1` if unset. |
+| `AWS_PROFILE` | No | `default`                | Optional profile for real AWS usage (not LocalStack). |
+| `AWS_ACCESS_KEY_ID` | No | `test`                   | Used for LocalStack clients when `USE_LOCALSTACK=true`. |
+| `AWS_SECRET_ACCESS_KEY` | No | `test`                   | Used for LocalStack clients when `USE_LOCALSTACK=true`. |
+
+- Set `OPENAI_API_KEY` for OpenAI models.
+
+## LOCALSTACK
+AWS is being mocked by `localstack`, which is hosted in `docker`. `Localstack` is included in the `docker-compose.yml`
+file as a service, along with `chatbot`. The data is seeded fresh on each startup of the container (e.g. `docker compose up -d`, `docker compose down`)
+The seed scripts are located in `scripts/localstack/.`. 
+
+## Start with Docker Compose
+
+```bash
+docker compose up -d
+```
+- Builds the docker image for `chatbot`, if it doesn't exist.  Can also add `--build` if the images does not build automatically.
+- Make sure you wait for the seed script to finish seeding localstack with data. View the logs once services are up! 
+
+Check status:
+```bash
+docker compose ps
+```
+
+Follow logs:
+```bash
+docker compose logs -f
+```
+- Views logs for all services (e.g. `localstack`, `chatbot`). 
+- Seed script is finished when it shows `Ready`. 
+
+Bring down the network and services:
+```bash
+docker compose down
+```
+
+## Tests with `curl` and example outputs
+
+### 1) New conversation (payload `user_id`)
+
+```bash
+curl -sS http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "demo-user-1",
+    "query": "What s3 buckets exist?"
+  }' | jq -r .answer
+```
+Output:
+```text
+Here are the S3 buckets that exist in your account, with high-level policy/ACL details:
+
+- data-bucket
+  - Policy: none
+  - ACL: FULL_CONTROL granted to a single canonical user (ID: 75aa57f0…).
+  - Public access: not explicitly allowed via policy or ACL.
+
+- private-bucket
+  - Policy: none
+  - ACL: FULL_CONTROL granted to a single canonical user (ID: 75aa57f0…).
+  - Public access: not explicitly allowed via policy or ACL.
+
+- private-bucket-2
+  - Policy: none
+  - ACL: FULL_CONTROL granted to a single canonical user (ID: 75aa57f0…).
+  - Public access: not explicitly allowed via policy or ACL.
+
+- private-bucket-3
+  - Policy: none
+  - ACL: FULL_CONTROL granted to a single canonical user (ID: 75aa57f0…).
+  - Public access: not explicitly allowed via policy or ACL.
+
+- public-bucket
+  - Policy: yes
+    - Statement: AllowPublicRead – Allows s3:GetObject for Principal: * (public) on arn:aws:s3:::public-bucket/*
+  - ACL: FULL_CONTROL to canonical user; READ permission granted to AllUsers (public)
+  - Public access: Publicly readable due to policy and ACL
+
+- public-bucket-2
+  - Policy: yes
+    - Statement: AllowPublicRead – Allows s3:GetObject for Principal: * on arn:aws:s3:::public-bucket-2/*
+  - ACL: FULL_CONTROL to canonical user; READ permission granted to AllUsers (public)
+  - Public access: Publicly readable due to policy and ACL
+
+- public-bucket-3
+  - Policy: yes
+    - Statement: AllowPublicRead – Allows s3:GetObject for Principal: * on arn:aws:s3:::public-bucket-3/*
+  - ACL: FULL_CONTROL to canonical user; READ permission granted to AllUsers (public)
+  - Public access: Publicly readable due to policy and ACL
+```
+
+### 2) Follow-up in same conversation (same payload `user_id`)
+
+```bash
+curl -sS http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "demo-user-1",
+    "query": "Which of those are public?"
+  }' | jq -r .answer
+```
+
+Output:
+```text
+Public buckets:
+- public-bucket
+- public-bucket-2
+- public-bucket-3
+
+Why: Each has a bucket policy allowing public GetObject (Principal: "*") and their ACLs grant READ to AllUsers. The other buckets (data-bucket, private-bucket, private-bucket-2, private-bucket-3) do not have public access.
+```
+
+### 3) Header-based conversation tracking (`x-user-id`)
+
+```bash
+curl -sS http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -H "x-user-id: demo-user-2" \
+  -d '{
+    "query": "List IAM users."
+  }' | jq -r .answer
+```
+
+Output:
+```text
+Here are the IAM users in your account:
+
+- alice
+  - ARN: arn:aws:iam::000000000000:user/alice
+  - Created: 2026-03-01 20:47:09 UTC
+- bob
+  - ARN: arn:aws:iam::000000000000:user/bob
+  - Created: 2026-03-01 20:47:11 UTC
+
+Total: 2 users.
+```
+
+### 4) Follow-up conversation with header (`x-user-id`)
+
+```bash
+curl -sS http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -H "x-user-id: demo-user-2" \
+  -d '{
+    "query": "What permissions does the user bob have?"
+  }' | jq -r .answer
+```
+
+Output:
+```text
+Here are Bob's permissions:
+
+- Inline policies directly on Bob: None
+- Policies attached directly to Bob: None
+- Groups Bob belongs to: Auditors
+- Group policies for Auditors: ReadOnlyAccess attached to the Auditors group
+- Inline policies for Auditors: None (per-group)
+- Effective permissions: ReadOnlyAccess (through the Auditors group)
+
+In short, Bob has read-only access to AWS resources as defined by the ReadOnlyAccess policy.
+```
+
+Important: for follow-up context to work, every request in the same thread must include the same identifier, either:
+- `user_id` in the JSON payload, or
+- `x-user-id` header.
+
+If neither is provided, the backend generates a random ID and the next request will not have prior context unless you send a stable `user_id` payload parameter or `x-user-id` header.

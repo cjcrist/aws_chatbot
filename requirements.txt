@@ -1,0 +1,9 @@
+boto3==1.42.59
+botocore==1.42.59
+dateutils==0.6.12
+fastapi==0.134.0
+langchain==1.2.10
+langchain-openai==1.1.10
+langgraph==1.0.10
+python-dotenv==1.2.1
+uvicorn==0.41.0
